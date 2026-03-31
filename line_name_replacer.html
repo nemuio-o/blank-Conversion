@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LINE TXT 名前置換ツール</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --line: #d9dce7;
+      --text: #111827;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-2: #0f766e;
+      --danger: #b91c1c;
+      --shadow: 0 10px 30px rgba(0,0,0,.08);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      padding: 24px 20px 8px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    p.note { margin: 0; color: var(--muted); font-size: 14px; }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 12px 20px 28px;
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 1.05fr .95fr;
+      align-items: start;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .stack { display: grid; gap: 10px; }
+    label { font-size: 13px; color: var(--muted); }
+    input[type="text"], textarea, input[type="file"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      background: #fff;
+      color: var(--text);
+    }
+    textarea { min-height: 220px; resize: vertical; }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+    }
+    button.secondary { background: #111827; }
+    button.ghost {
+      background: #eef2ff;
+      color: #1e3a8a;
+      border: 1px solid #c7d2fe;
+    }
+    button.danger {
+      background: #fee2e2;
+      color: var(--danger);
+      border: 1px solid #fecaca;
+    }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .rules { display: grid; gap: 10px; }
+    .rule {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .checkboxes {
+      display: grid;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .checkboxes label { color: var(--text); display: flex; gap: 8px; align-items: center; }
+    .toolbar { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .small { font-size: 12px; color: var(--muted); }
+    .preview {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0b1020;
+      color: #e5eefc;
+      border-radius: 12px;
+      padding: 14px;
+      min-height: 220px;
+      max-height: 520px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+    .stats {
+      display:flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .split {
+      display:grid;
+      gap: 12px;
+      grid-template-columns: 1fr 1fr;
+    }
+    .drop {
+      border: 1.5px dashed #9ca3af;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+      color: var(--muted);
+      background: #fafafa;
+    }
+    .drop.dragover { border-color: var(--accent); background: #eff6ff; color: #1d4ed8; }
+    @media (max-width: 920px) {
+      main { grid-template-columns: 1fr; }
+      .split { grid-template-columns: 1fr; }
+      .rule { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LINE TXT 名前置換ツール</h1>
+    <p class="note">タブ区切りを基準に、名前欄を安全に置換します。標準メッセージ、名前欄が空の通知、複数行メッセージに対応します。</p>
+  </header>
+
+  <main>
+    <section class="card stack">
+      <div class="stack">
+        <h2>1. TXT を入れる</h2>
+        <div id="drop" class="drop">ここに .txt をドラッグ＆ドロップ</div>
+        <input id="file" type="file" accept=".txt,text/plain" />
+      </div>
+
+      <div class="stack">
+        <h2>2. 置換ルール</h2>
+        <div id="rules" class="rules"></div>
+        <div class="row">
+          <button id="addRule" type="button" class="ghost">ルールを追加</button>
+          <button id="process" type="button">置換する</button>
+          <button id="download" type="button" class="secondary" disabled>出力を保存</button>
+        </div>
+        <div class="checkboxes">
+          <label><input id="replaceBody" type="checkbox" checked /> 名前欄だけでなく、本文内の <code>@名前</code> や通知文も置換する</label>
+          <label><input id="keepBlank" type="checkbox" checked /> 元の空行をできるだけ残す</label>
+        </div>
+        <p class="small">通知文の置換は、<code>が参加しました</code>、<code>が退会しました</code>、<code>メッセージの送信を取り消しました</code> のような行を拾います。元データの例でも、通常行は「時刻 + タブ + 名前 + タブ + 本文」、通知行は名前欄が空でした。fileciteturn1file2 fileciteturn1file4</p>
+      </div>
+    </section>
+
+    <section class="card stack">
+      <div class="split">
+        <div class="stack">
+          <h2>3. 入力</h2>
+          <textarea id="input" placeholder="ここにLINEのtxtを貼り付けることもできます"></textarea>
+        </div>
+        <div class="stack">
+          <h2>4. 出力</h2>
+          <div id="output" class="preview"></div>
+          <div class="stats" id="stats"></div>
+        </div>
+      </div>
+      <div class="small">
+        置換は、名前列の完全一致を優先し、本文内は見出しのある通知文と <code>@</code> 付きメンションだけを狙います。これで <code>ABC</code> を <code>1</code> にしても <code>ABCD</code> が <code>1D</code> になるような誤置換を避けます。
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById('file');
+    const inputEl = document.getElementById('input');
+    const outputEl = document.getElementById('output');
+    const statsEl = document.getElementById('stats');
+    const rulesEl = document.getElementById('rules');
+    const addRuleBtn = document.getElementById('addRule');
+    const processBtn = document.getElementById('process');
+    const downloadBtn = document.getElementById('download');
+    const replaceBodyEl = document.getElementById('replaceBody');
+    const keepBlankEl = document.getElementById('keepBlank');
+    const dropEl = document.getElementById('drop');
+
+    let lastOutput = '';
+    let lastFilename = 'output.txt';
+
+    function escapeRegExp(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function addRule(source = '', target = '') {
+      const row = document.createElement('div');
+      row.className = 'rule';
+      row.innerHTML = `
+        <input type="text" class="source" placeholder="置換前の名前" value="${source.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}" />
+        <input type="text" class="target" placeholder="置換後の名前" value="${target.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}" />
+        <button type="button" class="danger remove">削除</button>
+      `;
+      row.querySelector('.remove').addEventListener('click', () => row.remove());
+      rulesEl.appendChild(row);
+    }
+
+    function getRules() {
+      const rows = [...rulesEl.querySelectorAll('.rule')];
+      return rows.map(row => {
+        const source = row.querySelector('.source').value;
+        const target = row.querySelector('.target').value;
+        return { source, target };
+      }).filter(r => r.source !== '');
+    }
+
+    function splitMessageLine(line) {
+      const firstTab = line.indexOf('\t');
+      if (firstTab < 0) return null;
+      const time = line.slice(0, firstTab);
+      const rest = line.slice(firstTab + 1);
+      const secondTab = rest.indexOf('\t');
+      if (secondTab < 0) {
+        return { time, name: '', text: rest, raw: line };
+      }
+      const name = rest.slice(0, secondTab);
+      const text = rest.slice(secondTab + 1);
+      return { time, name, text, raw: line };
+    }
+
+    function parseLineText(text) {
+      const lines = text.replace(/\r\n?/g, '\n').split('\n');
+      const entries = [];
+      let currentDate = '';
+      let currentMsg = null;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const isDate = /^\d{4}\/\d{2}\/\d{2}(?:\(.+?\))?$/.test(trimmed);
+        if (isDate) {
+          entries.push({ type: 'date', value: line });
+          currentDate = line;
+          currentMsg = null;
+          continue;
+        }
+
+        const msg = splitMessageLine(line);
+        if (msg && /^\d{2}:\d{2}$/.test(msg.time)) {
+          const entry = { type: 'message', date: currentDate, time: msg.time, name: msg.name, text: msg.text, rawLines: [line] };
+          entries.push(entry);
+          currentMsg = entry;
+          continue;
+        }
+
+        if (currentMsg) {
+          currentMsg.text += '\n' + line;
+          currentMsg.rawLines.push(line);
+          continue;
+        }
+
+        if (keepBlankEl.checked && line === '') {
+          entries.push({ type: 'blank', value: '' });
+        } else if (line !== '') {
+          entries.push({ type: 'other', value: line });
+        }
+      }
+
+      return entries;
+    }
+
+    function isNameLikeChar(ch) {
+      if (!ch) return false;
+      return /[\p{L}\p{N}\p{M}\p{S}\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFE00-\uFE0F\uFEFF]/u.test(ch);
+    }
+
+    function replaceMentionTokens(text, source, target) {
+      const needle = '@' + source;
+      let out = '';
+      let i = 0;
+      while (i < text.length) {
+        const idx = text.indexOf(needle, i);
+        if (idx === -1) {
+          out += text.slice(i);
+          break;
+        }
+        const after = text[idx + needle.length] ?? '';
+        const before = idx === 0 ? '' : text[idx - 1];
+        const boundaryOk = !isNameLikeChar(before) && !isNameLikeChar(after);
+        out += text.slice(i, idx);
+        out += boundaryOk ? ('@' + target) : needle;
+        i = idx + needle.length;
+      }
+      return out;
+    }
+
+    function replaceNameInBody(text, source, target) {
+      text = replaceMentionTokens(text, source, target);
+
+      const suffixes = [
+        'が参加しました。',
+        'が参加しました',
+        'が退会しました。',
+        'が退会しました',
+        'がメッセージの送信を取り消しました。',
+        'がメッセージの送信を取り消しました'
+      ];
+
+      for (const suffix of suffixes) {
+        if (text.startsWith(source + suffix)) {
+          text = target + suffix + text.slice((source + suffix).length);
+        }
+      }
+
+      if (text === source) text = target;
+      return text;
+    }
+
+    function applyRules(entries, rules) {
+      const ordered = [...rules].sort((a, b) => b.source.length - a.source.length);
+      const stats = { nameField: 0, bodyField: 0, exactLines: 0 };
+
+      for (const entry of entries) {
+        if (entry.type !== 'message') continue;
+
+        for (const rule of ordered) {
+          if (entry.name === rule.source) {
+            entry.name = rule.target;
+            stats.nameField++;
+          }
+        }
+
+        if (replaceBodyEl.checked) {
+          let changed = false;
+          for (const rule of ordered) {
+            const before = entry.text;
+            entry.text = replaceNameInBody(entry.text, rule.source, rule.target);
+            if (entry.text !== before) changed = true;
+          }
+          if (changed) stats.bodyField++;
+        }
+      }
+
+      return stats;
+    }
+
+    function serialize(entries) {
+      const out = [];
+      for (const entry of entries) {
+        if (entry.type === 'date') {
+          out.push(entry.value);
+          continue;
+        }
+        if (entry.type === 'message') {
+          out.push(`${entry.time}\t${entry.name}\t${entry.text}`);
+          continue;
+        }
+        if (entry.type === 'blank') {
+          out.push('');
+          continue;
+        }
+        out.push(entry.value);
+      }
+      return out.join('\n');
+    }
+
+    function processNow() {
+      const raw = inputEl.value;
+      const rules = getRules();
+      const entries = parseLineText(raw);
+      const stats = applyRules(entries, rules);
+      const output = serialize(entries);
+      lastOutput = output;
+      outputEl.textContent = output || '(出力なし)';
+      downloadBtn.disabled = !output;
+      lastFilename = (fileInput.files[0]?.name || 'output.txt').replace(/\.txt$/i, '') + '_replaced.txt';
+      statsEl.textContent = `名前欄の置換: ${stats.nameField} 件 / 本文側の置換を含むメッセージ: ${stats.bodyField} 件 / ルール数: ${rules.length}`;
+    }
+
+    addRuleBtn.addEventListener('click', () => addRule());
+    processBtn.addEventListener('click', processNow);
+    downloadBtn.addEventListener('click', () => {
+      const blob = new Blob([lastOutput], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = lastFilename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const text = await file.text();
+      inputEl.value = text;
+      lastFilename = file.name.replace(/\.txt$/i, '') + '_replaced.txt';
+      processNow();
+    });
+
+    inputEl.addEventListener('input', () => {
+      // 編集しながら即反映したいときだけ使う。
+    });
+
+    [replaceBodyEl, keepBlankEl].forEach(el => el.addEventListener('change', processNow));
+
+    ['dragenter', 'dragover'].forEach(evt => {
+      dropEl.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropEl.classList.add('dragover');
+      });
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+      dropEl.addEventListener(evt, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropEl.classList.remove('dragover');
+      });
+    });
+    dropEl.addEventListener('drop', async (e) => {
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      const text = await file.text();
+      inputEl.value = text;
+      fileInput.value = '';
+      lastFilename = file.name.replace(/\.txt$/i, '') + '_replaced.txt';
+      processNow();
+    });
+
+    // 初期ルールのサンプル
+    addRule('ABC', '1');
+    addRule('︌︂︆︎︁︍︆︅︉︉︅︁︊', 'ユーザーA');
+
+    // 何も入っていなくても見本を少し表示
+    outputEl.textContent = 'txt を入れてから「置換する」を押してください。';
+  </script>
+</body>
+</html>
